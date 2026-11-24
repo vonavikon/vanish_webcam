@@ -192,6 +192,32 @@ class LiveRoomDissolveTests(unittest.TestCase):
             app.apply_dissolve(frame, background, mask, 0.0, field, noise), frame
         )
 
+    def test_cutting_the_person_out_matches_the_whole_frame_composite(self):
+        frame = np.full((60, 80, 3), (10, 200, 30), np.uint8)
+        background = np.full_like(frame, (200, 20, 20))
+        mask = np.zeros((60, 80), np.float32)
+        cv2.ellipse(mask, (40, 30), (12, 20), 0, 0, 360, 1.0, -1)
+        mask = cv2.GaussianBlur(mask, (0, 0), 1.5)
+        erased = app.erase_person(frame, background, mask)
+        np.testing.assert_allclose(erased, app.alpha_composite(background, frame, mask), atol=2)
+        np.testing.assert_array_equal(erased[30, 40], background[30, 40])  # Stored room behind the person.
+        np.testing.assert_array_equal(erased[5, 5], frame[5, 5])  # Live camera around them.
+        np.testing.assert_array_equal(app.erase_person(frame, background, np.zeros_like(mask)), frame)
+
+    def test_the_glow_survives_the_coarse_grid(self):
+        frame = np.full((60, 80, 3), (10, 200, 30), np.uint8)
+        background = np.full_like(frame, (200, 20, 20))
+        mask = np.zeros((60, 80), np.float32)
+        mask[10:50, 30:50] = 1.0
+        field, noise = app.make_dissolve_fields(60, 80)
+        noise[:] = 1.0  # Every point of the front sparkles.
+        with_glow = app.apply_dissolve(frame, background, mask, 0.5, field, noise)
+        front = np.abs(field[10:50, 30:50] - 0.5) < 0.018
+        lit = with_glow[10:50, 30:50][front].astype(int)
+        # Without the glow a front pixel is about (119, 25) in green and red; the tint lifts both.
+        self.assertGreater(int(lit[:, 1].max()), 170)
+        self.assertGreater(int(lit[:, 2].max()), 50)
+
 
 class MultiViewTests(unittest.TestCase):
     def setUp(self):

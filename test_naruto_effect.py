@@ -136,7 +136,14 @@ class NarutoVideoLoopTests(unittest.TestCase):
     def test_effect_is_sent_to_preview_and_virtual_camera(self):
         frames = [np.full((80, 120, 3), v, np.uint8) for v in (10, 40, 80, 120, 160)]
         capture = Mock()
-        capture.read.side_effect = [(True, frame) for frame in frames]
+        frame_index = [0]
+
+        def read():
+            frame_index[0] += 1
+            return True, frames[frame_index[0] - 1]
+
+        capture.read.side_effect = read
+        keys = (0, 0, 0, 0, ord("q"))  # A key belongs to the frame it was pressed in.
         segmenter, recognizer = Mock(), Mock()
         recognizer.recognize_joined_hands.return_value = True
         sound = Mock()
@@ -157,16 +164,17 @@ class NarutoVideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
             mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
             mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: preview.append(frame.copy())))
-            mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=(0, 0, 0, 0, ord("q"))))
+            mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[frame_index[0] - 1]))
             mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay vietato")))
             mocks.enter_context(patch("builtins.print"))
             self.assertEqual(app.run(), 0)
+        sent = [call.args[0] for call in virtual.send.call_args_list]
         self.assertEqual(len(preview), 5)
-        for sent, shown in zip(virtual.send.call_args_list, preview):
-            np.testing.assert_array_equal(sent.args[0], shown)
-        self.assertTrue(np.any(preview[2] != frames[2]))
-        self.assertTrue(np.any(preview[3] != frames[3]))
-        self.assertTrue(np.any(preview[4] != frames[1]))  # Tronco persistente.
+        for monitor, raw in zip(preview, frames):
+            np.testing.assert_array_equal(monitor, raw)  # La finestra resta una semplice telecamera.
+        self.assertTrue(np.any(sent[2] != frames[2]))
+        self.assertTrue(np.any(sent[3] != frames[3]))
+        self.assertTrue(np.any(sent[4] != frames[1]))  # Tronco persistente.
         # Il gesto è osservato anche durante l'effetto, per capire quando viene rilasciato.
         self.assertGreaterEqual(recognizer.recognize_joined_hands.call_count, 1)
         sound.play.assert_called_once()

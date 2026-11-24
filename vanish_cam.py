@@ -110,6 +110,11 @@ VANISH_SECONDS = 3.6
 APPEAR_SECONDS = 1.0
 RELEASE_SECONDS = 0.3
 GESTURE_INTERVAL_SECONDS = 0.14
+# Phases in which an effect is rendered on the video thread.
+HEAVY_PHASES = (
+    "vanishing", "naruto_vanishing", "appearing", "goku_vanishing", "goku_appearing",
+    "itachi_disappearing", "itachi_appearing",
+)
 
 
 @dataclass
@@ -144,8 +149,8 @@ def parse_args() -> argparse.Namespace:
         "--camera", type=int, default=None,
         help="Indice della webcam; se omesso, scegli la webcam nel menu iniziale",
     )
-    parser.add_argument("--width", type=int, default=960, help="Larghezza video")
-    parser.add_argument("--height", type=int, default=540, help="Altezza video")
+    parser.add_argument("--width", type=int, default=None, help="Larghezza video")
+    parser.add_argument("--height", type=int, default=None, help="Altezza video")
     parser.add_argument(
         "--fullscreen", action="store_true", help="Avvia a schermo intero"
     )
@@ -171,7 +176,14 @@ def parse_args() -> argparse.Namespace:
         help="Stampa nel terminale lo stato del riconoscimento (senza scritte nel video)",
     )
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.width is None and args.height is None:
+        # A MacBook camera delivers 1280x720 whatever is asked for; using it whole keeps the
+        # picture sharp instead of shrinking it to 960x540 and letting the call app blow it up.
+        args.width, args.height = (1280, 720) if platform.system() == "Darwin" else (960, 540)
+    args.width = args.width or 960
+    args.height = args.height or 540
+    return args
 
 
 def choose_mode(available: tuple[str, ...] | None = None, check_license=None) -> str | None:
@@ -380,6 +392,15 @@ def send_virtual_frame(camera, frame: np.ndarray) -> None:
     camera.send(np.ascontiguousarray(frame))
 
 
+def show_output(args: argparse.Namespace, virtual_camera, effect: np.ndarray, camera_frame: np.ndarray) -> None:
+    """Give the effect to the call and keep the window a plain monitor of the camera."""
+    if virtual_camera is None:
+        cv2.imshow(WINDOW_NAME, effect)
+        return
+    send_virtual_frame(virtual_camera, effect)
+    cv2.imshow(WINDOW_NAME, camera_frame if args.no_mirror else cv2.flip(camera_frame, 1))
+
+
 def download_models(mode: str = "normal") -> None:
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     for destination, url in MODEL_URLS.items():
@@ -425,7 +446,7 @@ class SizedCapture:
     def read(self) -> tuple[bool, np.ndarray]:
         ok, frame = self.capture.read()
         if ok and frame.shape[1::-1] != self.size:
-            frame = cv2.resize(frame, self.size, interpolation=cv2.INTER_LINEAR)
+            frame = cv2.resize(frame, self.size, interpolation=cv2.INTER_AREA)
         return ok, frame
 
     def __getattr__(self, name):
@@ -653,6 +674,18 @@ def alpha_composite(person: np.ndarray, background: np.ndarray, alpha: np.ndarra
     )
 
 
+def erase_person(frame: np.ndarray, background: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """The live frame with the person cut out of it. Only the silhouette's rectangle is touched;
+    the rest of the frame already is the camera."""
+    x, y, width, height = cv2.boundingRect((mask > 0.01).astype(np.uint8))
+    erased = frame.copy()
+    if width and height:
+        rectangle = np.s_[y:y + height, x:x + width]
+        # The stored room where the person is, the camera everywhere else in the rectangle.
+        erased[rectangle] = alpha_composite(background[rectangle], frame[rectangle], mask[rectangle])
+    return erased
+
+
 def apply_dissolve(
     frame: np.ndarray,
     background: np.ndarray,
@@ -660,11 +693,17 @@ def apply_dissolve(
     progress: float,
     field: np.ndarray,
     sparkle_noise: np.ndarray,
+    erased: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Dissolve the person over the stored empty room; the rest of the frame stays live."""
+    """Dissolve the person over the stored empty room; the rest of the frame stays live.
+
+    `erased` is the frame with the person already cut out of it. Pass it when it was made this
+    frame anyway; otherwise it is made here.
+    """
     if progress <= 0.002:
         return frame
-    erased = alpha_composite(background, frame, mask)
+    if erased is None:
+        erased = alpha_composite(background, frame, mask)
     if progress >= 0.999:
         return erased
 
@@ -688,15 +727,22 @@ def apply_dissolve(
         & (mask > 0.48)
         & (sparkle_noise > 0.54)
     ).astype(np.float32)
-    glow = cv2.GaussianBlur(edge, (0, 0), sigmaX=5.0, sigmaY=5.0)
-    glow = np.clip(glow * 5.0 + edge, 0.0, 1.0)[:, :, None]
-    cyan = np.full_like(output, (255, 228, 92), dtype=np.uint8)
-    result = np.clip(
-        output.astype(np.float32) * (1.0 - glow * 0.8)
-        + cyan.astype(np.float32) * glow * 0.8,
-        0,
-        255,
-    ).astype(np.uint8)
+    # The glow is soft, so it is blurred on a half-size grid and scaled back: a seventh of the
+    # work, and within 0.03 of the full-size glow everywhere.
+    area_width, area_height = right - left, bottom - top
+    small = cv2.resize(edge, (max(1, area_width // 2), max(1, area_height // 2)), interpolation=cv2.INTER_AREA)
+    glow = cv2.resize(
+        cv2.GaussianBlur(small, (0, 0), sigmaX=2.5, sigmaY=2.5) * 5.0,
+        (area_width, area_height), interpolation=cv2.INTER_LINEAR,
+    )
+    glow = np.clip(glow + edge, 0.0, 1.0) * 0.8
+    # The same glow in integer math: about a third of the time of the float version.
+    weight = np.repeat((glow * 255).astype(np.uint8)[:, :, None], 3, axis=2)
+    cyan = np.full_like(output, (255, 228, 92))
+    result = cv2.add(
+        cv2.multiply(output, cv2.bitwise_not(weight), scale=1 / 255.0),
+        cv2.multiply(cyan, weight, scale=1 / 255.0),
+    )
     canvas = erased
     canvas[area] = result
     return canvas
@@ -1062,6 +1108,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
     virtual_camera = None
     virtual_camera_initialized = False
     calibration_remaining = None
+    frame_tick = 0
     last_gesture_report = 0.0
     started = time.perf_counter()
     print("[Webcam] Esci dall'inquadratura per 4 secondi: acquisisco lo sfondo.")
@@ -1112,15 +1159,15 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
             if not ok:
                 raise RuntimeError("La webcam ha smesso di restituire immagini.")
 
-            if not args.no_mirror:
-                camera_frame = cv2.flip(camera_frame, 1)
-
             height, width = camera_frame.shape[:2]
             if not virtual_camera_initialized:
                 virtual_camera = open_virtual_camera(args, width, height)
                 virtual_camera_initialized = True
                 if virtual_camera is not None:
                     resources.callback(virtual_camera.close)
+            if not args.no_mirror and virtual_camera is None:
+                # Without a virtual camera the window is the output: the effect, seen as a mirror.
+                camera_frame = cv2.flip(camera_frame, 1)
             if mode in ("normal", "particles", "naruto") and (
                     dissolve_field is None or dissolve_field.shape != (height, width)):
                 dissolve_field, sparkle_noise = make_dissolve_fields(height, width)
@@ -1235,7 +1282,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
                         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                     last_mask = person_mask(segmenter, mp_image, elapsed_ms, width, height)
                     last_mask_at = now
-                display = alpha_composite(background, camera_frame, last_mask)
+                display = erase_person(camera_frame, background, last_mask)
                 if mode == "naruto" and log_anchor is not None:
                     overlay_log(display, log_sprite, landed_log_anchor(log_anchor, height),
                                 cache=log_cache)
@@ -1261,6 +1308,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
                 display = apply_dissolve(
                     camera_frame, background, last_mask, 1.0 - min(1.0, age / APPEAR_SECONDS),
                     dissolve_field, sparkle_noise,
+                    erased=erase_person(camera_frame, background, last_mask),
                 )
                 if age >= APPEAR_SECONDS:
                     state.phase = "ready"
@@ -1294,7 +1342,7 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
                         last_mask_at = now
                     if mode == "naruto" and log_anchor is None:
                         log_anchor = substitution_anchor(mask)
-                    erased = alpha_composite(background, camera_frame, mask)
+                    erased = erase_person(camera_frame, background, mask)
 
                 if mode == "naruto" and state.phase == "naruto_vanishing":
                     age = max(0.04, time.perf_counter() - state.vanish_started)
@@ -1321,16 +1369,22 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
                         if progress >= 1.0:
                             state.phase = "vanished"
                     display = apply_dissolve(
-                        camera_frame, background, mask, progress, dissolve_field, sparkle_noise
+                        camera_frame, background, mask, progress, dissolve_field, sparkle_noise,
+                        erased=erased,
                     )
 
             if license_session is not None:
                 license_session.ensure_valid()
-            if virtual_camera is not None:
-                send_virtual_frame(virtual_camera, display)
-            cv2.imshow(WINDOW_NAME, display)
+            show_output(args, virtual_camera, display, camera_frame)
 
-            key = cv2.waitKey(1) & 0xFF
+            frame_tick += 1
+            if virtual_camera is not None and state.phase in HEAVY_PHASES and not frame_tick % 2:
+                # Servicing the window costs a display refresh on macOS. While an effect renders,
+                # the window is only a monitor: it is serviced every other frame and the call
+                # gets the time. A key pressed meanwhile waits for the next service.
+                key = -1
+            else:
+                key = cv2.waitKey(1) & 0xFF
             if key in (ord("q"), 27):
                 break
             if key == ord(" "):

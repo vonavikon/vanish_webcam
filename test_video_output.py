@@ -120,6 +120,17 @@ class MenuTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "Edizione non riconosciuta"):
                 app.edition_modes(edition_file)
 
+    def test_default_size_follows_the_camera_of_the_platform(self):
+        for system, expected in (("Darwin", (1280, 720)), ("Windows", (960, 540))):
+            with self.subTest(system=system), patch.object(app.sys, "argv", ["vanish_cam.py"]), \
+                 patch.object(app.platform, "system", return_value=system):
+                args = app.parse_args()
+            self.assertEqual((args.width, args.height), expected)
+        with patch.object(app.sys, "argv", ["vanish_cam.py", "--width", "640"]), \
+             patch.object(app.platform, "system", return_value="Darwin"):
+            args = app.parse_args()
+        self.assertEqual((args.width, args.height), (640, 540))  # A size given by hand is kept.
+
     def test_single_mode_edition_starts_without_a_menu(self):
         with patch.object(app, "edition_modes", return_value=("naruto",)), \
              patch.object(app, "parse_args", return_value=arguments(mode=None)), \
@@ -169,11 +180,17 @@ class VideoLoopTests(unittest.TestCase):
     def run_mock_video(self, send_error=None, gesture=("No_Hand", 0.0), mode="normal", mask=None):
         capture = Mock()
         frames = [np.full((24, 40, 3), color, np.uint8) for color in (10, 40, 80, 120, 160)]
-        capture.read.side_effect = [(True, frame) for frame in frames]
+        frame_index = [0]
+
+        def read():
+            frame_index[0] += 1
+            return True, frames[frame_index[0] - 1]
+
+        capture.read.side_effect = read  # One frame per iteration; past the last one it fails.
         segmenter, recognizer = Mock(), Mock()
         camera = Mock(width=40, height=24)
         camera.send.side_effect = send_error
-        displayed = []
+        shown = []
         with ExitStack() as mocks:
             mocks.enter_context(patch.object(app, "parse_args", return_value=arguments(mode=mode)))
             mocks.enter_context(patch.object(app, "download_models"))
@@ -190,13 +207,15 @@ class VideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch.object(app.cv2, "namedWindow"))
             mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
             destroy = mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
-            mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: displayed.append(frame.copy())))
+            mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: shown.append(frame.copy())))
+            # A key belongs to the frame it was pressed in, whether or not the window was serviced then.
             keys = (0, 0, ord("v") if gesture[0] != "Victory" else 0, 0, ord("q"))
-            mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=keys))
+            pump = mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[frame_index[0] - 1]))
             mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay vietato")))
             mocks.enter_context(patch("builtins.print"))
             if send_error is None:
                 self.assertEqual(app.run(), 0)
+                self.assertEqual(pump.call_count, 4)  # Mentre l'effetto va, la finestra è servita un frame sì e uno no.
             else:
                 with self.assertRaisesRegex(RuntimeError, "send failed"):
                     app.run()
@@ -209,41 +228,60 @@ class VideoLoopTests(unittest.TestCase):
             destroy.assert_called_once()
             if mode == "particles":
                 self.assertGreaterEqual(segment.call_count, 1)  # La sagoma è seguita durante l'effetto.
-        return frames, camera, displayed
+        return frames, camera, shown, [call.args[0] for call in camera.send.call_args_list]
 
-    def test_preview_and_virtual_output_are_clean_in_all_phases(self):
-        frames, camera, displayed = self.run_mock_video()
-        self.assertEqual(len(displayed), 5)
-        for sent, preview in zip(camera.send.call_args_list, displayed):
-            np.testing.assert_array_equal(sent.args[0], preview)
-        np.testing.assert_array_equal(displayed[0], frames[0])  # Calibrazione.
-        np.testing.assert_array_equal(displayed[2], frames[2])  # Pronto.
-        np.testing.assert_array_equal(displayed[4], frames[1])  # Sparito: solo sfondo.
+    def test_window_is_a_plain_monitor_and_the_call_gets_the_effect(self):
+        frames, camera, shown, sent = self.run_mock_video()
+        self.assertEqual(len(shown), 5)
+        for monitor, raw in zip(shown, frames):
+            np.testing.assert_array_equal(monitor, raw)  # La finestra non mostra l'effetto.
+        self.assertEqual(len(sent), 5)
+        np.testing.assert_array_equal(sent[0], frames[0])  # Calibrazione.
+        np.testing.assert_array_equal(sent[2], frames[2])  # Pronto.
+        np.testing.assert_array_equal(sent[4], frames[1])  # Sparito: solo sfondo.
 
-    def test_first_gesture_starts_dissolve_in_preview_and_virtual_output(self):
-        frames, camera, displayed = self.run_mock_video(gesture=("Victory", 0.9))
-        np.testing.assert_array_equal(camera.send.call_args_list[2].args[0], displayed[2])
-        self.assertTrue(np.any(displayed[3] != frames[3]))  # Animazione in corso.
-        self.assertTrue(np.any(displayed[3] != frames[1]))  # Non ancora sparito.
-        np.testing.assert_array_equal(displayed[4], frames[1])  # Animazione completata.
+    def test_the_monitor_mirrors_the_camera_while_the_call_does_not(self):
+        effect = np.full((24, 40, 3), 90, np.uint8)
+        camera_frame = np.zeros((24, 40, 3), np.uint8)
+        camera_frame[:, :20] = (10, 200, 30)  # Two different halves, so a flip is visible.
+        for no_mirror, expected in ((False, camera_frame[:, ::-1]), (True, camera_frame)):
+            with self.subTest(no_mirror=no_mirror):
+                camera = Mock(width=40, height=24)
+                shown = []
+                with patch.object(app.cv2, "imshow", side_effect=lambda name, image: shown.append(image.copy())):
+                    app.show_output(arguments(no_mirror=no_mirror), camera, effect, camera_frame)
+                np.testing.assert_array_equal(shown[0], expected)
+                np.testing.assert_array_equal(camera.send.call_args.args[0], effect)
+
+    def test_without_a_virtual_camera_the_window_shows_the_effect(self):
+        effect = np.full((24, 40, 3), 90, np.uint8)
+        shown = []
+        with patch.object(app.cv2, "imshow", side_effect=lambda name, image: shown.append(image.copy())):
+            app.show_output(arguments(), None, effect, np.zeros((24, 40, 3), np.uint8))
+        np.testing.assert_array_equal(shown[0], effect)
+
+    def test_first_gesture_starts_dissolve_in_the_call(self):
+        frames, camera, shown, sent = self.run_mock_video(gesture=("Victory", 0.9))
+        np.testing.assert_array_equal(sent[2][:12], frames[2][:12])  # La dissolvenza parte dal basso.
+        self.assertTrue(np.any(sent[3] != frames[3]))  # Animazione in corso.
+        self.assertTrue(np.any(sent[3] != frames[1]))  # Non ancora sparito.
+        np.testing.assert_array_equal(sent[4], frames[1])  # Animazione completata.
 
     def test_particles_use_same_v_gesture_and_virtual_output(self):
-        frames, camera, displayed = self.run_mock_video(
+        frames, camera, shown, sent = self.run_mock_video(
             gesture=("Victory", 0.9), mode="particles",
         )
-        self.assertTrue(np.any(displayed[2] != frames[2]))  # Parte subito.
-        self.assertTrue(np.any(displayed[3] != frames[3]))  # Corpo si dissolve.
-        np.testing.assert_array_equal(displayed[4], frames[1])
-        for sent, preview in zip(camera.send.call_args_list, displayed):
-            np.testing.assert_array_equal(sent.args[0], preview)
+        self.assertTrue(np.any(sent[2] != frames[2]))  # Parte subito.
+        self.assertTrue(np.any(sent[3] != frames[3]))  # Corpo si dissolve.
+        np.testing.assert_array_equal(sent[4], frames[1])
 
     def test_vanished_room_follows_the_camera_outside_the_person(self):
         half = np.zeros((24, 40), np.float32)
         half[:, :20] = 1.0
-        frames, camera, displayed = self.run_mock_video(mask=half)
+        frames, camera, shown, sent = self.run_mock_video(mask=half)
         # Sparito: the stored room where the person is, the live camera everywhere else.
-        np.testing.assert_array_equal(displayed[4][:, :20], frames[1][:, :20])
-        np.testing.assert_array_equal(displayed[4][:, 20:], frames[4][:, 20:])
+        np.testing.assert_array_equal(sent[4][:, :20], frames[1][:, :20])
+        np.testing.assert_array_equal(sent[4][:, 20:], frames[4][:, 20:])
 
     def test_all_devices_close_on_send_error(self):
         self.run_mock_video(send_error=RuntimeError("send failed"))
@@ -292,7 +330,7 @@ class VideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
             mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
             mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: displayed.append(frame.copy())))
-            mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=keys))
+            mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[cursor[0] - 1]))
             printed = mocks.enter_context(patch("builtins.print"))
             with ExitStack() as resources:
                 self.assertEqual(app.run_camera(arguments(mode="goku"), resources, "goku"), 0)
@@ -308,13 +346,14 @@ class VideoLoopTests(unittest.TestCase):
             "[Goku] Riapparizione tra 1...",
             "[Goku] Riapparizione!",
         ])
+        sent = [call.args[0] for call in camera.send.call_args_list]
         gone = np.where(mask[..., None] > 0, frames[1], frames[16])  # Stanza viva, persona tolta.
-        np.testing.assert_array_equal(displayed[2], frames[2])
-        np.testing.assert_array_equal(displayed[14], frames[1])
-        np.testing.assert_array_equal(displayed[16], gone)
-        np.testing.assert_array_equal(displayed[29][40, 60], frames[29][40, 60])
-        for sent, preview in zip(camera.send.call_args_list, displayed):
-            np.testing.assert_array_equal(sent.args[0], preview)
+        for monitor, raw in zip(displayed, frames):
+            np.testing.assert_array_equal(monitor, raw)  # La finestra resta una semplice telecamera.
+        np.testing.assert_array_equal(sent[2], frames[2])
+        np.testing.assert_array_equal(sent[14], frames[1])
+        np.testing.assert_array_equal(sent[16], gone)
+        np.testing.assert_array_equal(sent[29][40, 60], frames[29][40, 60])
 
 
 if __name__ == "__main__":

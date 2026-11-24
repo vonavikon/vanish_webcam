@@ -72,15 +72,17 @@ While you are invisible, the app keeps showing the camera and cuts only you out 
 
 In Normal Vanish, Particles and Naruto the same gesture brings you back: let it go for a moment, then show it again. You return with a short dissolve. `R` still works.
 
+When a virtual camera is active, the effect goes to the call only. The call sees it unmirrored, while the app's own window stays a plain mirror of the camera, so you keep seeing yourself while you are invisible to the others. `--no-mirror` turns that mirror off. Without a virtual camera the window shows the effect, as before. While an effect is rendering, the monitor is refreshed every other frame, so the call keeps its frame rate.
+
 ## macOS
 
 On a Mac, double-click `AVVIA_MAC.command` or run it with the same arguments as `AVVIA_LOCALE.bat`. It creates `.venv-local` with Python 3.12 or 3.13, installs the requirements once and starts `vanish_cam.py` without a license check. Python 3.14 and later do not work yet: `pygame` has no packages for them. The terminal output is also appended to `~/Library/Logs/VanishCam.log`.
 
 `requirements.txt` pins MediaPipe 1.2.3 on macOS instead of 1.0.1. With 1.0.1 every task that detects hands, a face or a gesture aborts the process while MediaPipe opens its Metal helper, so all modes close before the camera preview.
 
-The preview keeps the camera's frame rate. Gesture recognition runs on its own thread, and when the camera keeps a larger format than the requested one (AVFoundation delivers 1280x720 whatever `--width` and `--height` say) frames are brought down to that size. Without this, the same Mac showed 18 to 25 fps with a stall of 90 to 190 ms on every gesture check.
+The preview keeps the camera's frame rate. Gesture recognition runs on its own thread, and when the camera keeps a larger format than the requested one (AVFoundation delivers 1280x720 whatever `--width` and `--height` say) frames are brought down to that size. Without this, the same Mac showed 18 to 25 fps with a stall of 90 to 190 ms on every gesture check. The default size on macOS is 1280x720, the format a MacBook camera delivers, so the picture is not shrunk before the call app shows it.
 
-Tested on an Apple Silicon MacBook Air with macOS 26.6.2: the test suite (101 tests, 3 Windows-only skips), all five effects from the gesture to the return with the built-in camera (gestures fed by a script), about 30 fps in every phase. An Intel Mac and OBS Virtual Camera on macOS are not tested yet. For the virtual camera, start it once in OBS 30 or later and approve the system extension in System Settings.
+Tested on an Apple Silicon MacBook Air with macOS 26.6.2: the test suite (106 tests, 3 Windows-only skips). Normal Vanish, from the gesture to the return, at 1280x720 with the effect going to OBS Virtual Camera: 29 to 30 fps in every phase, with a person-sized silhouette. The other four modes were measured at 960x540 without a virtual camera, about 30 fps from the gesture to the return (gestures fed by a script). An Intel Mac and OBS Virtual Camera on macOS are not tested yet. For the virtual camera, start it once in OBS 30 or later and approve the system extension in System Settings.
 
 ## Virtual camera and OBS
 
