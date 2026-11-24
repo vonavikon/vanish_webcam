@@ -52,7 +52,7 @@ Premi `Invio` per 1 secondo, oppure inserisci per esempio `0.5`, `0.1` o `0,5`.
 Il valore deve essere maggiore di zero. `Continua` conferma; `Annulla` o `ESC`
 chiudono l'avvio. Sparizione e riapparizione usano entrambe il tempo scelto.
 
-**Naruto Vanish:** Bring your palms together in front of the webcam, with your fingers side by side rather than interlaced. Keep both hands visible. As soon as the gesture is recognized, you vanish in a cloud of smoke and a wooden log appears, falls, and remains visible until you press `R`. No microphone is needed. Naruto mode uses `hand_landmarker.task` to track both hands. `assets/vanish.MP3` plays through your computer speakers when the disappearance starts, including when triggered with `V`. You can trigger it again after pressing `R`.
+**Naruto Vanish:** Bring your palms together in front of the webcam, with your fingers side by side rather than interlaced. Keep both hands visible. As soon as the gesture is recognized, you vanish in a cloud of smoke and a wooden log appears, falls, and remains visible until you press `R` or join your palms again. No microphone is needed. Naruto mode uses `hand_landmarker.task` to track both hands. `assets/vanish.MP3` plays through your computer speakers when the disappearance starts, including when triggered with `V`. You can trigger it again after pressing `R`.
 
 **Itachi Uchiha Disappear:** Touch both hands in front of the center of your chest, with both hands visible. Parts of your captured silhouette turn into individually flapping, cel-shaded crows that fly in curved paths. Larger crows cross the foreground, with brief ink edges, flight streaks and drifting feathers. A translucent blood-red ink texture covers the captured room during the transformation and remains while you are invisible. The supplied Sharingan eyes appear briefly at the top of the frame, then fade away. Release your hands, then touch them at your chest again to reappear as the crows converge and reconstruct your silhouette; the red background fades back to the real room. The transition lasts about 4 seconds in each direction. `V` previews the disappearance and `R` starts the animated return when you are back in frame. This mode uses the bundled hand landmarker and does not add audio. Adjust `EFFECT_SECONDS` and `BODY_RELEASE_SECONDS` in `itachi_effect.py` to tune its pacing.
 
@@ -66,6 +66,12 @@ local_app\AVVIA_LOCALE.bat --mode goku
 local_app\AVVIA_LOCALE.bat --mode itachi
 ```
 
+## Live room and gesture return
+
+While you are invisible, the app keeps showing the camera and cuts only you out of it, so the room stays live instead of freezing on the photo taken at start. The patch you cover shows that photo, because the camera cannot see behind you.
+
+In Normal Vanish, Particles and Naruto the same gesture brings you back: let it go for a moment, then show it again. You return with a short dissolve. `R` still works.
+
 ## macOS
 
 On a Mac, double-click `AVVIA_MAC.command` or run it with the same arguments as `AVVIA_LOCALE.bat`. It creates `.venv-local` with Python 3.12 or 3.13, installs the requirements once and starts `vanish_cam.py` without a license check. Python 3.14 and later do not work yet: `pygame` has no packages for them. The terminal output is also appended to `~/Library/Logs/VanishCam.log`.
@@ -74,7 +80,7 @@ On a Mac, double-click `AVVIA_MAC.command` or run it with the same arguments as 
 
 The preview keeps the camera's frame rate. Gesture recognition runs on its own thread, and when the camera keeps a larger format than the requested one (AVFoundation delivers 1280x720 whatever `--width` and `--height` say) frames are brought down to that size. Without this, the same Mac showed 18 to 25 fps with a stall of 90 to 190 ms on every gesture check.
 
-Tested on an Apple Silicon MacBook Air with macOS 26.6.2: the test suite (95 tests, 3 Windows-only skips), all five effects with the built-in camera (Goku and Itachi in the ready phase), 30 fps in every mode. An Intel Mac and OBS Virtual Camera on macOS are not tested yet. For the virtual camera, start it once in OBS 30 or later and approve the system extension in System Settings.
+Tested on an Apple Silicon MacBook Air with macOS 26.6.2: the test suite (101 tests, 3 Windows-only skips), all five effects from the gesture to the return with the built-in camera (gestures fed by a script), about 30 fps in every phase. An Intel Mac and OBS Virtual Camera on macOS are not tested yet. For the virtual camera, start it once in OBS 30 or later and approve the system extension in System Settings.
 
 ## Virtual camera and OBS
 
