@@ -72,7 +72,9 @@ On a Mac, double-click `AVVIA_MAC.command` or run it with the same arguments as 
 
 `requirements.txt` pins MediaPipe 1.2.3 on macOS instead of 1.0.1. With 1.0.1 every task that detects hands, a face or a gesture aborts the process while MediaPipe opens its Metal helper, so all modes close before the camera preview.
 
-Tested on an Apple Silicon Mac with macOS 26.6.2: the test suite (91 tests, 3 Windows-only skips), all five effects, and Normal Vanish with the built-in camera (background capture, the V sign and the dissolve). An Intel Mac, the other modes with a camera and OBS Virtual Camera on macOS are not tested yet. For the virtual camera, start it once in OBS 30 or later and approve the system extension in System Settings.
+The preview keeps the camera's frame rate. Gesture recognition runs on its own thread, and when the camera keeps a larger format than the requested one (AVFoundation delivers 1280x720 whatever `--width` and `--height` say) frames are brought down to that size. Without this, the same Mac showed 18 to 25 fps with a stall of 90 to 190 ms on every gesture check.
+
+Tested on an Apple Silicon MacBook Air with macOS 26.6.2: the test suite (95 tests, 3 Windows-only skips), all five effects with the built-in camera (Goku and Itachi in the ready phase), 30 fps in every mode. An Intel Mac and OBS Virtual Camera on macOS are not tested yet. For the virtual camera, start it once in OBS 30 or later and approve the system extension in System Settings.
 
 ## Virtual camera and OBS
 
