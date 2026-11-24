@@ -94,6 +94,7 @@ class SettingsTests(unittest.TestCase):
             stack.enter_context(patch.object(app.time,'perf_counter',side_effect=lambda:clock[0]))
             for name in ('namedWindow','resizeWindow','destroyAllWindows','imshow'):
                 stack.enter_context(patch.object(app.cv2,name))
+            stack.enter_context(patch.object(app.cv2,'getWindowProperty',return_value=1))
             stack.enter_context(patch.object(app.cv2,'waitKey',side_effect=([0]*9+[ord('q')])) )
             with ExitStack() as resources:
                 self.assertEqual(app.run_camera(args,resources,'goku'),0)

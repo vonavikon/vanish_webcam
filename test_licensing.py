@@ -208,6 +208,7 @@ class EntryPointTests(unittest.TestCase):
             stack.enter_context(patch.object(app,'open_virtual_camera',return_value=virtual))
             for method in ('namedWindow','resizeWindow','destroyAllWindows'):
                 stack.enter_context(patch.object(app.cv2,method))
+            stack.enter_context(patch.object(app.cv2,'getWindowProperty',return_value=1))
             with self.assertRaisesRegex(licensing.LicenseError,'Revocata'):
                 with ExitStack() as resources:
                     app.run_camera(args,resources,'normal',guard)

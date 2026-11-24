@@ -1,5 +1,5 @@
 #!/bin/bash
-# Avvio locale su macOS: ambiente Python, componenti e webcam.
+# Starts VanishCam on macOS: Python environment, components and webcam.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -13,6 +13,11 @@ trap fail ERR
 
 VENV_DIR=".venv-local"
 VENV_PY="$VENV_DIR/bin/python"
+
+if [ -x "$VENV_PY" ] && ! "$VENV_PY" -c "import sys" >/dev/null 2>&1; then
+  echo "[Vanish Lab] The Python environment stopped working, most likely because Python was upgraded. Rebuilding it..."
+  rm -rf "$VENV_DIR"
+fi
 
 if [ ! -x "$VENV_PY" ]; then
   echo "[Vanish Lab] Creating the local Python environment..."

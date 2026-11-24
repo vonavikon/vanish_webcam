@@ -177,7 +177,8 @@ class MenuTests(unittest.TestCase):
 
 
 class VideoLoopTests(unittest.TestCase):
-    def run_mock_video(self, send_error=None, gesture=("No_Hand", 0.0), mode="normal", mask=None):
+    def run_mock_video(self, send_error=None, gesture=("No_Hand", 0.0), mode="normal", mask=None,
+                      window_visible=1.0):
         capture = Mock()
         frames = [np.full((24, 40, 3), color, np.uint8) for color in (10, 40, 80, 120, 160)]
         frame_index = [0]
@@ -206,6 +207,7 @@ class VideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch.object(app.time, "perf_counter", side_effect=times))
             mocks.enter_context(patch.object(app.cv2, "namedWindow"))
             mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
+            mocks.enter_context(patch.object(app.cv2, "getWindowProperty", return_value=window_visible))
             destroy = mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
             mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: shown.append(frame.copy())))
             # A key belongs to the frame it was pressed in, whether or not the window was serviced then.
@@ -215,7 +217,8 @@ class VideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch("builtins.print"))
             if send_error is None:
                 self.assertEqual(app.run(), 0)
-                self.assertEqual(pump.call_count, 4)  # Mentre l'effetto va, la finestra è servita un frame sì e uno no.
+                if window_visible >= 1:
+                    self.assertEqual(pump.call_count, 4)  # While the effect runs, the window is serviced every other frame.
             else:
                 with self.assertRaisesRegex(RuntimeError, "send failed"):
                     app.run()
@@ -286,6 +289,10 @@ class VideoLoopTests(unittest.TestCase):
     def test_all_devices_close_on_send_error(self):
         self.run_mock_video(send_error=RuntimeError("send failed"))
 
+    def test_closing_the_window_quits_cleanly(self):
+        frames, camera, shown, sent = self.run_mock_video(window_visible=-1.0)
+        self.assertEqual(len(shown), 1)  # One frame, then the closed window is seen.
+
     def test_goku_vanishes_and_reappears_only_after_one_second_holds(self):
         first_hold = tuple(4.3 + index * 0.101 for index in range(11))
         second_hold = tuple(6.4 + index * 0.101 for index in range(11))
@@ -328,6 +335,7 @@ class VideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch.object(app.time, "perf_counter", side_effect=lambda: clock[0]))
             mocks.enter_context(patch.object(app.cv2, "namedWindow"))
             mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
+            mocks.enter_context(patch.object(app.cv2, "getWindowProperty", return_value=1))
             mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
             mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: displayed.append(frame.copy())))
             mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[cursor[0] - 1]))

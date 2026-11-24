@@ -1385,6 +1385,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
                 key = -1
             else:
                 key = cv2.waitKey(1) & 0xFF
+                if cv2.getWindowProperty(WINDOW_NAME, cv2.WND_PROP_VISIBLE) < 1:
+                    break  # The window was closed with its button: quit, like any other app.
             if key in (ord("q"), 27):
                 break
             if key == ord(" "):

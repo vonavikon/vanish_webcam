@@ -162,6 +162,7 @@ class NarutoVideoLoopTests(unittest.TestCase):
             )))
             mocks.enter_context(patch.object(app.cv2, "namedWindow"))
             mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
+            mocks.enter_context(patch.object(app.cv2, "getWindowProperty", return_value=1))
             mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
             mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: preview.append(frame.copy())))
             mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[frame_index[0] - 1]))

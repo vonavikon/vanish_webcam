@@ -102,7 +102,9 @@ OBS has only one virtual camera. Do not use it as both an OBS input and output a
 - `R`: make the person reappear.
 - `V`: manually start the selected mode's effect.
 - `F`: toggle fullscreen.
-- `Q` or `ESC`: quit and release the cameras.
+- `Q` or `ESC`: quit and release the cameras. Closing the window quits as well.
+
+If a key does nothing, click the window once: on macOS keys reach the window only when it is in front.
 
 The `V` and `R` keys are disabled in Goku mode.
 
