@@ -117,7 +117,7 @@ class MenuTests(unittest.TestCase):
                 edition_file.write_text(edition, encoding="utf-8")
                 self.assertEqual(app.edition_modes(edition_file), expected)
             edition_file.write_text("unknown", encoding="utf-8")
-            with self.assertRaisesRegex(RuntimeError, "Edizione non riconosciuta"):
+            with self.assertRaisesRegex(RuntimeError, "Unknown edition"):
                 app.edition_modes(edition_file)
 
     def test_default_size_follows_the_camera_of_the_platform(self):
@@ -341,10 +341,10 @@ class VideoLoopTests(unittest.TestCase):
         countdown = [call.args[0] for call in printed.call_args_list
                      if call.args and call.args[0].startswith("[Goku] ")]
         self.assertEqual(countdown, [
-            "[Goku] Sparizione tra 1...",
-            "[Goku] Sparizione!",
-            "[Goku] Riapparizione tra 1...",
-            "[Goku] Riapparizione!",
+            "[Goku] Vanish in 1...",
+            "[Goku] Vanishing!",
+            "[Goku] Reappear in 1...",
+            "[Goku] Reappearing!",
         ])
         sent = [call.args[0] for call in camera.send.call_args_list]
         gone = np.where(mask[..., None] > 0, frames[1], frames[16])  # Stanza viva, persona tolta.
