@@ -68,7 +68,7 @@ local_app\AVVIA_LOCALE.bat --mode itachi
 
 ## macOS
 
-On a Mac, double-click `AVVIA_MAC.command` or run it with the same arguments as `AVVIA_LOCALE.bat`. It creates `.venv-local` with Python 3.12 or 3.13, installs the requirements once and starts `vanish_cam.py` without a license check. Python 3.14 and later do not work yet: `pygame` has no packages for them.
+On a Mac, double-click `AVVIA_MAC.command` or run it with the same arguments as `AVVIA_LOCALE.bat`. It creates `.venv-local` with Python 3.12 or 3.13, installs the requirements once and starts `vanish_cam.py` without a license check. Python 3.14 and later do not work yet: `pygame` has no packages for them. The terminal output is also appended to `~/Library/Logs/VanishCam.log`.
 
 `requirements.txt` pins MediaPipe 1.2.3 on macOS instead of 1.0.1. With 1.0.1 every task that detects hands, a face or a gesture aborts the process while MediaPipe opens its Metal helper, so all modes close before the camera preview.
 

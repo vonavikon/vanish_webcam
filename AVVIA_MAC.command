@@ -35,5 +35,11 @@ if ! "$VENV_PY" -c "import cv2, mediapipe, numpy, pyvirtualcam" >/dev/null 2>&1;
   "$VENV_PY" -m pip install -r requirements.txt
 fi
 
-echo "[Vanish Lab] Avvio la webcam..."
-"$VENV_PY" vanish_cam.py "$@"
+LOG="$HOME/Library/Logs/VanishCam.log"
+mkdir -p "$(dirname "$LOG")"
+if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2000000 ]; then
+  mv "$LOG" "$LOG.1"
+fi
+
+echo "[Vanish Lab] Avvio la webcam... (registro: $LOG)"
+PYTHONUNBUFFERED=1 "$VENV_PY" vanish_cam.py "$@" 2>&1 | tee -a "$LOG"
