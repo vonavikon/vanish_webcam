@@ -180,7 +180,7 @@ class EntryPointTests(unittest.TestCase):
         run.assert_not_called()
         with patch.object(app.sys, 'argv', ['vanish_cam.py']), \
              patch.object(app.sys, 'frozen', True, create=True), \
-             patch.object(app, 'activate_license', side_effect=licensing.LicenseError('Revocata')), \
+             patch.object(app, 'activate_license', side_effect=licensing.LicenseError('Revoked')), \
              patch.object(app, 'show_license_error'), patch.object(app,'run') as run:
             self.assertEqual(app.main(), 1)
         run.assert_not_called()
@@ -198,7 +198,7 @@ class EntryPointTests(unittest.TestCase):
         capture, segmenter, recognizer, virtual = Mock(), Mock(), Mock(), Mock()
         capture.read.return_value = (True, np.zeros((24, 40, 3), np.uint8))
         guard = Mock()
-        guard.ensure_valid.side_effect = [None, licensing.LicenseError('Revocata')]
+        guard.ensure_valid.side_effect = [None, licensing.LicenseError('Revoked')]
         args = SimpleNamespace(camera=0,width=40,height=24,fps=30,fullscreen=False,
                                no_mirror=True,gesture_debug=False)
         with ExitStack() as stack:
@@ -209,7 +209,7 @@ class EntryPointTests(unittest.TestCase):
             for method in ('namedWindow','resizeWindow','destroyAllWindows'):
                 stack.enter_context(patch.object(app.cv2,method))
             stack.enter_context(patch.object(app.cv2,'getWindowProperty',return_value=1))
-            with self.assertRaisesRegex(licensing.LicenseError,'Revocata'):
+            with self.assertRaisesRegex(licensing.LicenseError,'Revoked'):
                 with ExitStack() as resources:
                     app.run_camera(args,resources,'normal',guard)
         virtual.send.assert_not_called()
