@@ -178,12 +178,15 @@ class MenuTests(unittest.TestCase):
 
 class VideoLoopTests(unittest.TestCase):
     def run_mock_video(self, send_error=None, gesture=("No_Hand", 0.0), mode="normal", mask=None,
-                      window_visible=1.0):
+                      window_visible=1.0, keys=None, skips=()):
         capture = Mock()
         frames = [np.full((24, 40, 3), color, np.uint8) for color in (10, 40, 80, 120, 160)]
-        frame_index = [0]
+        frame_index, reads = [0], [0]
 
         def read():
+            reads[0] += 1
+            if reads[0] - 1 in skips:
+                return False, None  # The camera skips this read; the next one delivers the real frame.
             frame_index[0] += 1
             return True, frames[frame_index[0] - 1]
 
@@ -205,13 +208,14 @@ class VideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch.object(app, "recognize_gesture", return_value=gesture))
             times = (0, 0, 0.1, 4.1, 4.3, 4.35, 5.0, 5.02, 8.2, 8.23)
             mocks.enter_context(patch.object(app.time, "perf_counter", side_effect=times))
+            camera.retry_sleep = mocks.enter_context(patch.object(app.time, "sleep"))  # The wait for a skipped frame.
             mocks.enter_context(patch.object(app.cv2, "namedWindow"))
             mocks.enter_context(patch.object(app.cv2, "resizeWindow"))
             mocks.enter_context(patch.object(app.cv2, "getWindowProperty", return_value=window_visible))
             destroy = mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
             mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: shown.append(frame.copy())))
             # A key belongs to the frame it was pressed in, whether or not the window was serviced then.
-            keys = (0, 0, ord("v") if gesture[0] != "Victory" else 0, 0, ord("q"))
+            keys = keys or (0, 0, ord("v") if gesture[0] != "Victory" else 0, 0, ord("q"))
             pump = mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[frame_index[0] - 1]))
             mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay is forbidden")))
             mocks.enter_context(patch("builtins.print"))
@@ -262,6 +266,55 @@ class VideoLoopTests(unittest.TestCase):
         with patch.object(app.cv2, "imshow", side_effect=lambda name, image: shown.append(image.copy())):
             app.show_output(arguments(), None, effect, np.zeros((24, 40, 3), np.uint8))
         np.testing.assert_array_equal(shown[0], effect)
+
+    def test_the_effect_in_the_window_is_mirrored_like_the_camera(self):
+        effect = np.zeros((24, 40, 3), np.uint8)
+        effect[:, :20] = (10, 200, 30)  # Two different halves, so a flip is visible.
+        for no_mirror, expected in ((False, effect[:, ::-1]), (True, effect)):
+            with self.subTest(no_mirror=no_mirror):
+                camera = Mock(width=40, height=24)
+                shown = []
+                with patch.object(app.cv2, "imshow", side_effect=lambda name, image: shown.append(image.copy())):
+                    app.show_output(arguments(no_mirror=no_mirror), camera, effect,
+                                    np.full((24, 40, 3), 7, np.uint8), monitor_effect=True)
+                np.testing.assert_array_equal(shown[0], expected)
+                np.testing.assert_array_equal(camera.send.call_args.args[0], effect)  # The call is not mirrored.
+
+    def test_m_shows_the_effect_in_the_window_and_leaves_the_call_alone(self):
+        plain = self.run_mock_video(gesture=("Victory", 0.9))
+        frames, camera, shown, sent = self.run_mock_video(
+            gesture=("Victory", 0.9), keys=(0, ord("m"), 0, 0, ord("q")),
+        )
+        for monitor, raw in zip(shown[:2], frames[:2]):
+            np.testing.assert_array_equal(monitor, raw)  # The mirror until the key is read.
+        for monitor, effect in zip(shown[2:], sent[2:]):
+            np.testing.assert_array_equal(monitor, effect)  # Then the window shows what the call gets.
+        for same, other in zip(sent, plain[3]):
+            np.testing.assert_array_equal(same, other)  # The key does not change the call.
+
+    def test_m_again_returns_the_mirror(self):
+        frames, camera, shown, sent = self.run_mock_video(
+            gesture=("Victory", 0.9), keys=(0, ord("m"), ord("M"), 0, ord("q")),
+        )
+        for monitor, raw in zip(shown[:2], frames[:2]):
+            np.testing.assert_array_equal(monitor, raw)
+        np.testing.assert_array_equal(shown[2], sent[2])  # One frame with the effect in the window.
+        for monitor, raw in zip(shown[3:], frames[3:]):
+            np.testing.assert_array_equal(monitor, raw)  # Then the mirror again, while the call gets the effect.
+        self.assertTrue(np.any(sent[3] != frames[3]))
+
+    def test_a_skipped_frame_is_waited_for(self):
+        plain = self.run_mock_video()
+        frames, camera, shown, sent = self.run_mock_video(skips=(2,))
+        for monitor, other in zip(shown, plain[2]):
+            np.testing.assert_array_equal(monitor, other)  # The loop goes on as if nothing had happened.
+        for same, other in zip(sent, plain[3]):
+            np.testing.assert_array_equal(same, other)
+        camera.retry_sleep.assert_called_once_with(app.CAMERA_FRAME_RETRY_SECONDS)
+
+    def test_a_camera_that_stays_silent_stops_the_app(self):
+        with self.assertRaisesRegex(RuntimeError, "stopped delivering frames"):
+            self.run_mock_video(skips=range(20))
 
     def test_first_gesture_starts_dissolve_in_the_call(self):
         frames, camera, shown, sent = self.run_mock_video(gesture=("Victory", 0.9))

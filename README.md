@@ -22,7 +22,8 @@ While the person is invisible, the area they cover shows the stored background, 
 - **Windows launchers.** `start_windows.bat` and its two wrappers, `start_windows_virtual_camera.bat` and `start_windows_no_virtual_camera.bat`, work from the root of the repository: `start_windows.bat` creates `.venv-local` there, installs `requirements.txt` and starts `vanish_cam.py`. The files of the original project lived in a `local_app` folder and went one level up. The launchers were not tested on Windows.
 - **Frame rate.** Gesture recognition runs on a worker thread (`AsyncRecognizer`), frames larger than requested are brought to the requested size (`SizedCapture`), the silhouette is tracked at 20 Hz while the Normal, Particles or Naruto effects run and while the person is invisible, and the compositing uses integer math. On macOS the default size is 1280x720, which a MacBook camera delivers whatever size is asked for.
 - **Live room.** While the person is invisible, the camera picture is shown with the person cut out (`erase_person`) instead of a frozen photo. In Normal, Particles and Naruto the same gesture brings the person back with a short dissolve; the gesture has to be let go first.
-- **Virtual camera.** When one is active, the effect goes to the call only, unmirrored, and the app's window is a mirror of the camera. While an effect renders, that window is refreshed every other frame.
+- **Virtual camera.** When one is active, the effect goes to the call only, unmirrored, and the app's window is a mirror of the camera. While an effect renders, that window is refreshed every other frame. The `M` key shows the effect in that window, for a try without a call.
+- **Skipped frames.** A frame the camera does not deliver is asked for again, three times half a second apart, instead of quitting the app at the first miss.
 - **English.** The interface, the messages and the comments are in English.
 - **Launcher names.** The launcher files have English names now; the original project used Italian names. They are `start_mac.command`, `start_windows.bat`, `start_windows_virtual_camera.bat` and `start_windows_no_virtual_camera.bat`.
 - **Window close.** Closing the window quits the app and releases the cameras.
@@ -75,7 +76,7 @@ When the app does not start, the launchers of both systems refer to this table. 
 | `Camera N is not available` | Close other apps that may use the camera, or try another index with `--camera` |
 | `Could not download the MediaPipe models` | Check the internet connection and start again |
 | `Virtual camera not available` | Install OBS Studio with the OBS Virtual Camera driver, or Unity Capture, and stop the virtual camera in OBS before starting the app. Unless a virtual camera was asked for explicitly, the app then goes on with the window only |
-| `The camera stopped delivering frames` | The app quits. Start it again |
+| `The camera stopped delivering frames` | The camera gave no frame for a few seconds. The app quits; start it again |
 | `Install pygame or ffplay to play` | Install the packages of `requirements.txt`; `pygame` is among them |
 
 ### Windows
@@ -115,7 +116,7 @@ In the mode menu and the camera menu, `Q` or `ESC` quits. In the hold-time dialo
 
 The app opens the virtual camera through `pyvirtualcam`. By default it tries to open one and uses it when available; the terminal prints the name of the device. When none can be opened, the app prints a message and continues with the window only.
 
-With a virtual camera the call receives the effect, unmirrored. The app's window keeps showing the camera as a mirror, so you still see yourself while the call sees an empty room. `--no-mirror` turns the mirror off.
+With a virtual camera the call receives the effect, unmirrored. The app's window keeps showing the camera as a mirror, so you still see yourself while the call sees an empty room. `--no-mirror` turns the mirror off. To watch the effect in the app's window without a call, press `M` in that window: it shows the effect, mirrored like the camera, until `M` is pressed again. The call is not changed by it.
 
 - `--virtual-camera`: a virtual camera is required. The app stops when none can be opened. The same happens when the camera named by `--virtual-backend` or `--virtual-device` cannot be opened.
 - `--no-virtual-camera`: no virtual camera is opened, and the window shows the effect, mirrored unless `--no-mirror` is given.
@@ -135,6 +136,7 @@ The keys are read from the video window (`Webcam - Preview`), so it has to have 
 | `V` | Start the effect without a gesture. Off in Goku. In Itachi it works only while you are visible |
 | `R` | Start the return. In Normal, Particles and Naruto it gives a 1 s dissolve while the person is invisible and cancels a running effect. In Itachi it starts the animated return once you are back in the frame. Off in Goku |
 | `F` | Toggle full screen |
+| `M` | With a virtual camera: show the effect in this window instead of the mirror of the camera. Press it again to return to the mirror. Without a virtual camera the key does nothing |
 | `Q` or `ESC` | Quit and release the cameras. Closing the window quits as well |
 
 `V` and `R` do nothing until the first background is captured. With a virtual camera, the keys are read every other frame while an effect renders, so a key pressed in between is handled on the next frame.
@@ -242,12 +244,12 @@ PYTHONPATH=../vanish-wrap python -m unittest local_app.test_goku_effect local_ap
   local_app.test_particles_effect local_app.test_vanish_cam local_app.test_video_output
 ```
 
-The suite has 107 tests. Three of them, in `test_licensing.py`, need Windows and are skipped elsewhere.
+The suite has 112 tests. Three of them, in `test_licensing.py`, need Windows and are skipped elsewhere.
 
 | Module | Covers |
 | --- | --- |
 | `test_vanish_cam.py` | The V sign (rotation, mirroring, scale, look-alikes), the immediate start, the return by the same gesture, the live-room dissolve, the multi-view retries, `SizedCapture`, `AsyncRecognizer` |
-| `test_video_output.py` | The virtual camera, the camera menu, the editions and the default sizes, and the video loop with a fake camera and a scripted clock: window as a monitor, effect in the call, closing the window, the Goku holds |
+| `test_video_output.py` | The virtual camera, the camera menu, the editions and the default sizes, and the video loop with a fake camera and a scripted clock: window as a monitor, the `M` key, a skipped camera frame, effect in the call, closing the window, the Goku holds |
 | `test_naruto_effect.py` | Joined hands, smoke and log, the mode menu, the effect in the video loop |
 | `test_goku_effect.py` | The forehead pose, the hold gate, the teleport animation |
 | `test_goku_settings.py` | The hold-time dialog, the start sequence and a fractional hold in the video loop |
