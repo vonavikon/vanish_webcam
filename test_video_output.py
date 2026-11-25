@@ -178,7 +178,7 @@ class MenuTests(unittest.TestCase):
 
 class VideoLoopTests(unittest.TestCase):
     def run_mock_video(self, send_error=None, gesture=("No_Hand", 0.0), mode="normal", mask=None,
-                      window_visible=1.0, keys=None, skips=()):
+                      window_visible=1.0, keys=None, skips=(), pumps=5):
         capture = Mock()
         frames = [np.full((24, 40, 3), color, np.uint8) for color in (10, 40, 80, 120, 160)]
         frame_index, reads = [0], [0]
@@ -222,7 +222,7 @@ class VideoLoopTests(unittest.TestCase):
             if send_error is None:
                 self.assertEqual(app.run(), 0)
                 if window_visible >= 1:
-                    self.assertEqual(pump.call_count, 4)  # While the effect runs, the window is serviced every other frame.
+                    self.assertEqual(pump.call_count, pumps)  # With the mirror in the window (M), it is serviced every other frame while an effect runs.
             else:
                 with self.assertRaisesRegex(RuntimeError, "send failed"):
                     app.run()
@@ -237,17 +237,17 @@ class VideoLoopTests(unittest.TestCase):
                 self.assertGreaterEqual(segment.call_count, 1)  # The silhouette is tracked during the effect.
         return frames, camera, shown, [call.args[0] for call in camera.send.call_args_list]
 
-    def test_window_is_a_plain_monitor_and_the_call_gets_the_effect(self):
+    def test_window_shows_the_effect_and_the_call_gets_it_too(self):
         frames, camera, shown, sent = self.run_mock_video()
         self.assertEqual(len(shown), 5)
-        for monitor, raw in zip(shown, frames):
-            np.testing.assert_array_equal(monitor, raw)  # The window does not show the effect.
+        for monitor, effect in zip(shown, sent):
+            np.testing.assert_array_equal(monitor, effect)  # The window shows what the call gets.
         self.assertEqual(len(sent), 5)
         np.testing.assert_array_equal(sent[0], frames[0])  # Calibration.
         np.testing.assert_array_equal(sent[2], frames[2])  # Ready.
         np.testing.assert_array_equal(sent[4], frames[1])  # Vanished: background only.
 
-    def test_the_monitor_mirrors_the_camera_while_the_call_does_not(self):
+    def test_the_mirror_mirrors_the_camera_while_the_call_does_not(self):
         effect = np.full((24, 40, 3), 90, np.uint8)
         camera_frame = np.zeros((24, 40, 3), np.uint8)
         camera_frame[:, :20] = (10, 200, 30)  # Two different halves, so a flip is visible.
@@ -256,7 +256,7 @@ class VideoLoopTests(unittest.TestCase):
                 camera = Mock(width=40, height=24)
                 shown = []
                 with patch.object(app.cv2, "imshow", side_effect=lambda name, image: shown.append(image.copy())):
-                    app.show_output(arguments(no_mirror=no_mirror), camera, effect, camera_frame)
+                    app.show_output(arguments(no_mirror=no_mirror), camera, effect, camera_frame, monitor_effect=False)
                 np.testing.assert_array_equal(shown[0], expected)
                 np.testing.assert_array_equal(camera.send.call_args.args[0], effect)
 
@@ -276,31 +276,31 @@ class VideoLoopTests(unittest.TestCase):
                 shown = []
                 with patch.object(app.cv2, "imshow", side_effect=lambda name, image: shown.append(image.copy())):
                     app.show_output(arguments(no_mirror=no_mirror), camera, effect,
-                                    np.full((24, 40, 3), 7, np.uint8), monitor_effect=True)
+                                    np.full((24, 40, 3), 7, np.uint8))  # The default: the effect in the window.
                 np.testing.assert_array_equal(shown[0], expected)
                 np.testing.assert_array_equal(camera.send.call_args.args[0], effect)  # The call is not mirrored.
 
-    def test_m_shows_the_effect_in_the_window_and_leaves_the_call_alone(self):
+    def test_m_shows_the_mirror_in_the_window_and_leaves_the_call_alone(self):
         plain = self.run_mock_video(gesture=("Victory", 0.9))
         frames, camera, shown, sent = self.run_mock_video(
-            gesture=("Victory", 0.9), keys=(0, ord("m"), 0, 0, ord("q")),
+            gesture=("Victory", 0.9), keys=(0, ord("m"), 0, 0, ord("q")), pumps=4,
         )
-        for monitor, raw in zip(shown[:2], frames[:2]):
-            np.testing.assert_array_equal(monitor, raw)  # The mirror until the key is read.
-        for monitor, effect in zip(shown[2:], sent[2:]):
-            np.testing.assert_array_equal(monitor, effect)  # Then the window shows what the call gets.
+        for monitor, effect in zip(shown[:2], sent[:2]):
+            np.testing.assert_array_equal(monitor, effect)  # The effect until the key is read.
+        for monitor, raw in zip(shown[2:], frames[2:]):
+            np.testing.assert_array_equal(monitor, raw)  # Then the window shows the plain camera.
         for same, other in zip(sent, plain[3]):
             np.testing.assert_array_equal(same, other)  # The key does not change the call.
 
-    def test_m_again_returns_the_mirror(self):
+    def test_m_again_returns_the_effect(self):
         frames, camera, shown, sent = self.run_mock_video(
             gesture=("Victory", 0.9), keys=(0, ord("m"), ord("M"), 0, ord("q")),
         )
-        for monitor, raw in zip(shown[:2], frames[:2]):
-            np.testing.assert_array_equal(monitor, raw)
-        np.testing.assert_array_equal(shown[2], sent[2])  # One frame with the effect in the window.
-        for monitor, raw in zip(shown[3:], frames[3:]):
-            np.testing.assert_array_equal(monitor, raw)  # Then the mirror again, while the call gets the effect.
+        for monitor, effect in zip(shown[:2], sent[:2]):
+            np.testing.assert_array_equal(monitor, effect)
+        np.testing.assert_array_equal(shown[2], frames[2])  # One frame with the plain camera in the window.
+        for monitor, effect in zip(shown[3:], sent[3:]):
+            np.testing.assert_array_equal(monitor, effect)  # Then the effect again, as in the call.
         self.assertTrue(np.any(sent[3] != frames[3]))
 
     def test_a_skipped_frame_is_waited_for(self):
@@ -409,8 +409,8 @@ class VideoLoopTests(unittest.TestCase):
         ])
         sent = [call.args[0] for call in camera.send.call_args_list]
         gone = np.where(mask[..., None] > 0, frames[1], frames[16])  # Live room, person removed.
-        for monitor, raw in zip(displayed, frames):
-            np.testing.assert_array_equal(monitor, raw)  # The window stays a plain camera.
+        for monitor, effect in zip(displayed, sent):
+            np.testing.assert_array_equal(monitor, effect)  # The window shows what the call gets.
         np.testing.assert_array_equal(sent[2], frames[2])
         np.testing.assert_array_equal(sent[14], frames[1])
         np.testing.assert_array_equal(sent[16], gone)

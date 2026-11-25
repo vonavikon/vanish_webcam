@@ -130,7 +130,7 @@ class AppState:
     fullscreen: bool = False
     gesture_armed: bool = True
     gesture_free_since: float | None = None
-    monitor_effect: bool = False  # With a virtual camera: the window shows the effect, not the mirror (M).
+    monitor_effect: bool = True  # With a virtual camera: the window shows the effect; M shows the mirror of the camera.
 
     def gesture_due(self, now: float, interval: float) -> bool:
         if now - self.last_gesture_check < interval:
@@ -398,12 +398,12 @@ def send_virtual_frame(camera, frame: np.ndarray) -> None:
 
 
 def show_output(args: argparse.Namespace, virtual_camera, effect: np.ndarray, camera_frame: np.ndarray,
-                monitor_effect: bool = False) -> None:
-    """Give the effect to the call and keep the window a plain monitor of the camera.
+                monitor_effect: bool = True) -> None:
+    """Give the effect to the call and show it in the window.
 
-    The window shows the camera as a mirror, so the person still sees themselves while the call
-    sees the effect. `monitor_effect` puts the effect in the window instead (the M key): a way to
-    watch it without a call.
+    With a virtual camera the call gets the effect unmirrored and the window shows the same effect
+    as a mirror, so it can be watched without a call. `monitor_effect` False puts a mirror of the
+    plain camera in the window instead (the M key), to see oneself while invisible.
     """
     if virtual_camera is None:
         cv2.imshow(WINDOW_NAME, effect)
@@ -1181,8 +1181,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
                 virtual_camera_initialized = True
                 if virtual_camera is not None:
                     resources.callback(virtual_camera.close)
-                    print("[Webcam] M in the window shows the effect there instead of the mirror; "
-                          "M again brings the mirror back.")
+                    print("[Webcam] The window shows the effect. M in the window shows the mirror of the "
+                          "camera instead; M again brings the effect back.")
             if not args.no_mirror and virtual_camera is None:
                 # Without a virtual camera the window is the output: the effect, seen as a mirror.
                 camera_frame = cv2.flip(camera_frame, 1)
@@ -1396,10 +1396,13 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
             show_output(args, virtual_camera, display, camera_frame, state.monitor_effect)
 
             frame_tick += 1
-            if virtual_camera is not None and state.phase in HEAVY_PHASES and not frame_tick % 2:
-                # Servicing the window costs a display refresh on macOS. While an effect renders,
-                # the window is only a monitor: it is serviced every other frame and the call
-                # gets the time. A key pressed meanwhile waits for the next service.
+            if (virtual_camera is not None and not state.monitor_effect
+                    and state.phase in HEAVY_PHASES and not frame_tick % 2):
+                # Servicing the window costs a display refresh on macOS. While an effect renders and
+                # the window is only a mirror of the camera (the M key), it is serviced every other
+                # frame and the call gets the time. With the effect in the window it is serviced
+                # every frame, so the animation is smooth there. A key pressed meanwhile waits for
+                # the next service.
                 key = -1
             else:
                 key = cv2.waitKey(1) & 0xFF
@@ -1466,8 +1469,8 @@ def run_camera(args: argparse.Namespace, resources: ExitStack, mode: str, licens
                 particle_effect = None
             elif key in (ord("m"), ord("M")) and virtual_camera is not None:
                 state.monitor_effect = not state.monitor_effect
-                print("[Webcam] The window shows the effect." if state.monitor_effect
-                      else "[Webcam] The window shows the mirror of the camera.")
+                print("[Webcam] The window shows the mirror of the camera." if not state.monitor_effect
+                      else "[Webcam] The window shows the effect.")
             elif key == ord("f"):
                 state.fullscreen = not state.fullscreen
                 set_fullscreen(state.fullscreen)

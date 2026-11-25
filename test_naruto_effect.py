@@ -171,8 +171,8 @@ class NarutoVideoLoopTests(unittest.TestCase):
             self.assertEqual(app.run(), 0)
         sent = [call.args[0] for call in virtual.send.call_args_list]
         self.assertEqual(len(preview), 5)
-        for monitor, raw in zip(preview, frames):
-            np.testing.assert_array_equal(monitor, raw)  # The window stays a plain camera.
+        for monitor, effect in zip(preview, sent):
+            np.testing.assert_array_equal(monitor, effect)  # The window shows what the call gets.
         self.assertTrue(np.any(sent[2] != frames[2]))
         self.assertTrue(np.any(sent[3] != frames[3]))
         self.assertTrue(np.any(sent[4] != frames[1]))  # Persistent log.
