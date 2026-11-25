@@ -375,7 +375,7 @@ def open_virtual_camera(args: argparse.Namespace, width: int, height: int):
             "Virtual camera not available. Install OBS Studio (with the "
             "OBS Virtual Camera driver) or Unity Capture. If you use OBS Virtual Camera, "
             "stop 'Start Virtual Camera' in OBS. "
-            "Start from AVVIA_LOCALE.bat (Windows) or AVVIA_MAC.command (Mac) to install pyvirtualcam. "
+            "Start from start_windows.bat (Windows) or start_mac.command (Mac) to install pyvirtualcam. "
             f"Details: {error}"
         )
         if args.virtual_camera is True or args.virtual_backend or args.virtual_device:

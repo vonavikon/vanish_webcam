@@ -18,12 +18,13 @@ While the person is invisible, the area they cover shows the stored background, 
 
 ## What changed in this fork
 
-- **macOS support.** A new launcher, `AVVIA_MAC.command`, creates `.venv-local` with Python 3.12 or 3.13, installs the requirements, rebuilds the environment when it stopped working and appends the terminal output to `~/Library/Logs/VanishCam.log`. `requirements.txt` pins MediaPipe 1.2.3 on macOS, because 1.0.1 aborts the process there when a hand, face or gesture model starts.
-- **Windows launchers.** `AVVIA_LOCALE.bat` and its two wrappers, `AVVIA_VIRTUAL.bat` and `AVVIA_OBS.bat`, work from the root of the repository: `AVVIA_LOCALE.bat` creates `.venv-local` there, installs `requirements.txt` and starts `vanish_cam.py`. The files of the original project lived in a `local_app` folder and went one level up. The launchers were not tested on Windows.
+- **macOS support.** A new launcher, `start_mac.command`, creates `.venv-local` with Python 3.12 or 3.13, installs the requirements, rebuilds the environment when it stopped working and appends the terminal output to `~/Library/Logs/VanishCam.log`. `requirements.txt` pins MediaPipe 1.2.3 on macOS, because 1.0.1 aborts the process there when a hand, face or gesture model starts.
+- **Windows launchers.** `start_windows.bat` and its two wrappers, `start_windows_virtual_camera.bat` and `start_windows_no_virtual_camera.bat`, work from the root of the repository: `start_windows.bat` creates `.venv-local` there, installs `requirements.txt` and starts `vanish_cam.py`. The files of the original project lived in a `local_app` folder and went one level up. The launchers were not tested on Windows.
 - **Frame rate.** Gesture recognition runs on a worker thread (`AsyncRecognizer`), frames larger than requested are brought to the requested size (`SizedCapture`), the silhouette is tracked at 20 Hz while the Normal, Particles or Naruto effects run and while the person is invisible, and the compositing uses integer math. On macOS the default size is 1280x720, which a MacBook camera delivers whatever size is asked for.
 - **Live room.** While the person is invisible, the camera picture is shown with the person cut out (`erase_person`) instead of a frozen photo. In Normal, Particles and Naruto the same gesture brings the person back with a short dissolve; the gesture has to be let go first.
 - **Virtual camera.** When one is active, the effect goes to the call only, unmirrored, and the app's window is a mirror of the camera. While an effect renders, that window is refreshed every other frame.
 - **English.** The interface, the messages and the comments are in English.
+- **Launcher names.** The launcher files have English names now; the original project used Italian names. They are `start_mac.command`, `start_windows.bat`, `start_windows_virtual_camera.bat` and `start_windows_no_virtual_camera.bat`.
 - **Window close.** Closing the window quits the app and releases the cameras.
 - **Removed files.** `run3.py` and `face_landmarker.task`, two unused files of the original author's other app, are gone.
 
@@ -51,10 +52,10 @@ While the person is invisible, the area they cover shows the stored background, 
 ```sh
 git clone https://github.com/vonavikon/vanish_webcam.git
 cd vanish_webcam
-./AVVIA_MAC.command --mode normal --camera 0
+./start_mac.command --mode normal --camera 0
 ```
 
-The options skip both menus. Double-clicking `AVVIA_MAC.command` in Finder does the same without options, so the mode menu and the camera menu open. The launcher creates `.venv-local` with Python 3.12 or 3.13, installs the requirements when the packages cannot be imported and starts `vanish_cam.py` without a license check. If the environment stops working, for example after a Python upgrade, the launcher rebuilds it. The terminal output is also appended to `~/Library/Logs/VanishCam.log`.
+The options skip both menus. Double-clicking `start_mac.command` in Finder does the same without options, so the mode menu and the camera menu open. The launcher creates `.venv-local` with Python 3.12 or 3.13, installs the requirements when the packages cannot be imported and starts `vanish_cam.py` without a license check. If the environment stops working, for example after a Python upgrade, the launcher rebuilds it. The terminal output is also appended to `~/Library/Logs/VanishCam.log`.
 
 The same steps without the launcher:
 
@@ -83,12 +84,12 @@ Windows was not tested with this fork. The three launchers were checked by readi
 
 | File | What it does |
 | --- | --- |
-| `AVVIA_LOCALE.bat` | Creates `.venv-local` in the folder where it lies, installs `requirements.txt` and starts `vanish_cam.py` with the given options |
-| `AVVIA_VIRTUAL.bat` | Calls `AVVIA_LOCALE.bat` with `--virtual-camera` |
-| `AVVIA_OBS.bat` | Calls `AVVIA_LOCALE.bat` with `--no-virtual-camera` |
+| `start_windows.bat` | Creates `.venv-local` in the folder where it lies, installs `requirements.txt` and starts `vanish_cam.py` with the given options |
+| `start_windows_virtual_camera.bat` | Calls `start_windows.bat` with `--virtual-camera` |
+| `start_windows_no_virtual_camera.bat` | Calls `start_windows.bat` with `--no-virtual-camera` |
 | `BUILD_WINDOWS.bat` | Builds four executables with PyInstaller from `VanishCam.spec` and runs a self-test on each: `VanishCam.exe` (all modes), `Naruto Vanish Effect.exe`, `Goku Vanish Effect.exe` and `Normal and Particles Vanish.exe` |
 
-The three launchers work from the root of this repository, where they lie together with the sources. `AVVIA_LOCALE.bat` creates `.venv-local` there with `py -3`, or with `python` when `py` is absent, installs the requirements when `cv2`, `mediapipe`, `numpy` and `pyvirtualcam` cannot be imported and starts `vanish_cam.py` with the options given on the command line. When a step fails, it prints `Vanish Lab could not start` and refers to [Common problems](#common-problems). `BUILD_WINDOWS.bat` and `VanishCam.spec` use the files of the repository root as well.
+The three launchers work from the root of this repository, where they lie together with the sources. `start_windows.bat` creates `.venv-local` there with `py -3`, or with `python` when `py` is absent, installs the requirements when `cv2`, `mediapipe`, `numpy` and `pyvirtualcam` cannot be imported and starts `vanish_cam.py` with the options given on the command line. When a step fails, it prints `Vanish Lab could not start` and refers to [Common problems](#common-problems). `BUILD_WINDOWS.bat` and `VanishCam.spec` use the files of the repository root as well.
 
 The same steps without the launcher, from the root of the repository (not tested):
 
@@ -140,7 +141,7 @@ The keys are read from the video window (`Webcam - Preview`), so it has to have 
 
 ### Command-line options
 
-`AVVIA_MAC.command` passes its arguments to `vanish_cam.py`, so both take the same options.
+`start_mac.command` passes its arguments to `vanish_cam.py`, so both take the same options.
 
 | Option | Meaning |
 | --- | --- |
@@ -158,7 +159,7 @@ The keys are read from the video window (`Webcam - Preview`), so it has to have 
 Examples (`python` is the interpreter of the environment, `.venv-local/bin/python` when the launcher created it):
 
 ```sh
-./AVVIA_MAC.command --mode naruto --camera 0
+./start_mac.command --mode naruto --camera 0
 python vanish_cam.py --mode normal --width 960 --height 540 --fps 30
 python vanish_cam.py --mode itachi --virtual-camera --gesture-debug
 ```
@@ -204,8 +205,8 @@ Source files:
 | `license_client.py` | Online license check of the packaged Windows builds |
 | `licensing_backend/` | Firebase configuration and a Node test suite for the Firestore rules of the license service. The rules file itself is not in the repository |
 | `license_config.example.json` | Placeholder configuration for the license service |
-| `AVVIA_MAC.command` | macOS launcher |
-| `AVVIA_LOCALE.bat`, `AVVIA_VIRTUAL.bat`, `AVVIA_OBS.bat` | Windows launchers |
+| `start_mac.command` | macOS launcher |
+| `start_windows.bat`, `start_windows_virtual_camera.bat`, `start_windows_no_virtual_camera.bat` | Windows launchers |
 | `BUILD_WINDOWS.bat`, `VanishCam.spec`, `editions/` | Windows build. Each executable reads `edition.txt` and offers only its modes |
 | `requirements.txt` | Python packages |
 | `assets/` | Log and crow sprites, Sharingan image, two sounds, the icon of the executables |
