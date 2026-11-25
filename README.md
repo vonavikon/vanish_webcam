@@ -167,11 +167,11 @@ python vanish_cam.py --mode itachi --virtual-camera --gesture-debug
 1. `run()` in `vanish_cam.py` parses the options, shows the mode menu and the camera menu and, for Goku, the hold-time dialog.
 2. `run_camera()` downloads the missing models and opens the camera. The camera is asked for the chosen size; when it reports a larger one in both dimensions, `SizedCapture` resizes every frame to the requested size.
 3. `create_tasks()` builds the MediaPipe tasks: an image segmenter for the person's mask and, for the gesture, two instances of a recognizer, one in VIDEO mode that tracks and one in IMAGE mode for retries. Goku adds a face detector. The segmenter runs on the video thread. The recognizer runs on a worker thread (`AsyncRecognizer`): the video thread hands it the newest frame and goes on with the previous answer.
-4. Each frame passes through a phase machine: `calibrating`, `ready`, `vanishing`, `vanished`, `appearing`, then `ready` again. Naruto, Goku and Itachi have their own vanishing and appearing phases.
+4. Each frame passes through a phase machine: `calibrating`, `ready`, `vanishing`, `vanished`, `appearing`, then `ready` again. Naruto has its own vanishing phase; Goku and Itachi have their own vanishing and appearing phases.
 5. `calibrating` lasts 4 seconds. The background is the median of the frames captured in its last 0.55 seconds, at most the last 18 frames.
 6. The gesture is handed to the recognizer no more often than every 0.14 s in Normal and Particles, 0.08 s in Naruto, 0.10 s in Goku and 0.09 s in Itachi.
 7. While the person is invisible, and while the Normal, Particles and Naruto effects run, the mask is refreshed no more often than every 0.05 s (20 Hz). `erase_person()` paints the stored background over the person in the live frame; `apply_dissolve()` blends between the live person and that picture.
-8. `show_output()` sends the result to the virtual camera and to the window, as described under [Virtual camera](#virtual-camera).
+8. `show_output()` sends the result to the virtual camera, or to the window when none is open, as described under [Virtual camera](#virtual-camera).
 
 Goku and Itachi render their effect from the frame captured when the gesture was accepted. The Particle effect animates the silhouette it captured at the start of the effect.
 
