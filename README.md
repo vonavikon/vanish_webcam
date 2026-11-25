@@ -19,6 +19,7 @@ While the person is invisible, the area they cover shows the stored background, 
 ## What changed in this fork
 
 - **macOS support.** A new launcher, `AVVIA_MAC.command`, creates `.venv-local` with Python 3.12 or 3.13, installs the requirements, rebuilds the environment when it stopped working and appends the terminal output to `~/Library/Logs/VanishCam.log`. `requirements.txt` pins MediaPipe 1.2.3 on macOS, because 1.0.1 aborts the process there when a hand, face or gesture model starts.
+- **Windows launchers.** `AVVIA_LOCALE.bat` and its two wrappers, `AVVIA_VIRTUAL.bat` and `AVVIA_OBS.bat`, work from the root of the repository: `AVVIA_LOCALE.bat` creates `.venv-local` there, installs `requirements.txt` and starts `vanish_cam.py`. The files of the original project lived in a `local_app` folder and went one level up. The launchers were not tested on Windows.
 - **Frame rate.** Gesture recognition runs on a worker thread (`AsyncRecognizer`), frames larger than requested are brought to the requested size (`SizedCapture`), the silhouette is tracked at 20 Hz while the Normal, Particles or Naruto effects run and while the person is invisible, and the compositing uses integer math. On macOS the default size is 1280x720, which a MacBook camera delivers whatever size is asked for.
 - **Live room.** While the person is invisible, the camera picture is shown with the person cut out (`erase_person`) instead of a frozen photo. In Normal, Particles and Naruto the same gesture brings the person back with a short dissolve; the gesture has to be let go first.
 - **Virtual camera.** When one is active, the effect goes to the call only, unmirrored, and the app's window is a mirror of the camera. While an effect renders, that window is refreshed every other frame.
@@ -65,7 +66,7 @@ python3.13 -m venv .venv-local
 
 ### Common problems
 
-When the app does not start, the macOS launcher refers to this table. The messages of the app are also written to `~/Library/Logs/VanishCam.log`; the messages of the launcher itself are only in the terminal.
+When the app does not start, the launchers of both systems refer to this table. On macOS the messages of the app are also written to `~/Library/Logs/VanishCam.log`; the messages of the launchers themselves are only in the terminal.
 
 | Message in the terminal | What to do |
 | --- | --- |
@@ -78,18 +79,18 @@ When the app does not start, the macOS launcher refers to this table. The messag
 
 ### Windows
 
-Windows was not tested with this fork. The batch files come from the original project with only their messages translated.
+Windows was not tested with this fork. The three launchers were checked by reading, never by running. They come from the original project: this fork changed their paths to the layout of this repository and put their messages in English.
 
 | File | What it does |
 | --- | --- |
-| `AVVIA_LOCALE.bat` | Creates `.venv-local` one level up, installs `local_app\requirements.txt` and starts `local_app\vanish_cam.py` with the given options |
+| `AVVIA_LOCALE.bat` | Creates `.venv-local` in the folder where it lies, installs `requirements.txt` and starts `vanish_cam.py` with the given options |
 | `AVVIA_VIRTUAL.bat` | Calls `AVVIA_LOCALE.bat` with `--virtual-camera` |
 | `AVVIA_OBS.bat` | Calls `AVVIA_LOCALE.bat` with `--no-virtual-camera` |
 | `BUILD_WINDOWS.bat` | Builds four executables with PyInstaller from `VanishCam.spec` and runs a self-test on each: `VanishCam.exe` (all modes), `Naruto Vanish Effect.exe`, `Goku Vanish Effect.exe` and `Normal and Particles Vanish.exe` |
 
-The three launchers are written for a folder named `local_app` that holds the batch files together with the sources, and they create the environment one level above it. This repository keeps everything at the top level, so they do not work as they are. `BUILD_WINDOWS.bat` and `VanishCam.spec` do not depend on that layout.
+The three launchers work from the root of this repository, where they lie together with the sources. `AVVIA_LOCALE.bat` creates `.venv-local` there with `py -3`, or with `python` when `py` is absent, installs the requirements when `cv2`, `mediapipe`, `numpy` and `pyvirtualcam` cannot be imported and starts `vanish_cam.py` with the options given on the command line. When a step fails, it prints `Vanish Lab could not start` and refers to [Common problems](#common-problems). `BUILD_WINDOWS.bat` and `VanishCam.spec` use the files of the repository root as well.
 
-To start from source without the batch file, do by hand what `AVVIA_LOCALE.bat` does (not tested):
+The same steps without the launcher, from the root of the repository (not tested):
 
 ```powershell
 py -3 -m venv .venv-local
