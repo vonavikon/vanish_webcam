@@ -51,7 +51,7 @@ all_resources = [
 ]
 missing = [str(path) for path in (icon_file, license_config[0], *all_resources) if not path.is_file()]
 if missing:
-    raise SystemExit("File necessari alla build mancanti:\n" + "\n".join(missing))
+    raise SystemExit("Files needed for the build are missing:\n" + "\n".join(missing))
 
 mediapipe_binaries = collect_dynamic_libs("mediapipe")
 executables = []

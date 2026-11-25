@@ -1017,7 +1017,7 @@ def self_test() -> int:
         required.extend((LOG_PATH, SOUND_PATH))
     missing = [path.name for path in required if not path.is_file()]
     if missing:
-        raise RuntimeError(f"Risorse mancanti: {', '.join(missing)}")
+        raise RuntimeError(f"Missing resources: {', '.join(missing)}")
     if "naruto" in modes:
         load_log()
     if "itachi" in modes:
