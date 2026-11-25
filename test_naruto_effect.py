@@ -166,17 +166,17 @@ class NarutoVideoLoopTests(unittest.TestCase):
             mocks.enter_context(patch.object(app.cv2, "destroyAllWindows"))
             mocks.enter_context(patch.object(app.cv2, "imshow", side_effect=lambda name, frame: preview.append(frame.copy())))
             mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[frame_index[0] - 1]))
-            mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay vietato")))
+            mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay is forbidden")))
             mocks.enter_context(patch("builtins.print"))
             self.assertEqual(app.run(), 0)
         sent = [call.args[0] for call in virtual.send.call_args_list]
         self.assertEqual(len(preview), 5)
         for monitor, raw in zip(preview, frames):
-            np.testing.assert_array_equal(monitor, raw)  # La finestra resta una semplice telecamera.
+            np.testing.assert_array_equal(monitor, raw)  # The window stays a plain camera.
         self.assertTrue(np.any(sent[2] != frames[2]))
         self.assertTrue(np.any(sent[3] != frames[3]))
-        self.assertTrue(np.any(sent[4] != frames[1]))  # Tronco persistente.
-        # Il gesto è osservato anche durante l'effetto, per capire quando viene rilasciato.
+        self.assertTrue(np.any(sent[4] != frames[1]))  # Persistent log.
+        # The gesture is also observed during the effect, to know when it is released.
         self.assertGreaterEqual(recognizer.recognize_joined_hands.call_count, 1)
         sound.play.assert_called_once()
         sound.close.assert_called_once()

@@ -49,7 +49,7 @@ class VirtualCameraTests(unittest.TestCase):
     def test_send_preserves_colors_and_handles_noncontiguous_frames(self):
         camera = Mock(width=40, height=24)
         frame = np.zeros((24, 40, 3), np.uint8)
-        frame[:] = (10, 70, 200)  # BGR: non scambiare rosso e blu.
+        frame[:] = (10, 70, 200)  # BGR: red and blue must not be swapped.
         app.send_virtual_frame(camera, frame[:, ::-1])
         sent = camera.send.call_args.args[0]
         self.assertTrue(sent.flags.c_contiguous)
@@ -213,7 +213,7 @@ class VideoLoopTests(unittest.TestCase):
             # A key belongs to the frame it was pressed in, whether or not the window was serviced then.
             keys = (0, 0, ord("v") if gesture[0] != "Victory" else 0, 0, ord("q"))
             pump = mocks.enter_context(patch.object(app.cv2, "waitKey", side_effect=lambda delay: keys[frame_index[0] - 1]))
-            mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay vietato")))
+            mocks.enter_context(patch.object(app.cv2, "putText", side_effect=AssertionError("Overlay is forbidden")))
             mocks.enter_context(patch("builtins.print"))
             if send_error is None:
                 self.assertEqual(app.run(), 0)
@@ -230,18 +230,18 @@ class VideoLoopTests(unittest.TestCase):
             camera.close.assert_called_once()
             destroy.assert_called_once()
             if mode == "particles":
-                self.assertGreaterEqual(segment.call_count, 1)  # La sagoma è seguita durante l'effetto.
+                self.assertGreaterEqual(segment.call_count, 1)  # The silhouette is tracked during the effect.
         return frames, camera, shown, [call.args[0] for call in camera.send.call_args_list]
 
     def test_window_is_a_plain_monitor_and_the_call_gets_the_effect(self):
         frames, camera, shown, sent = self.run_mock_video()
         self.assertEqual(len(shown), 5)
         for monitor, raw in zip(shown, frames):
-            np.testing.assert_array_equal(monitor, raw)  # La finestra non mostra l'effetto.
+            np.testing.assert_array_equal(monitor, raw)  # The window does not show the effect.
         self.assertEqual(len(sent), 5)
-        np.testing.assert_array_equal(sent[0], frames[0])  # Calibrazione.
-        np.testing.assert_array_equal(sent[2], frames[2])  # Pronto.
-        np.testing.assert_array_equal(sent[4], frames[1])  # Sparito: solo sfondo.
+        np.testing.assert_array_equal(sent[0], frames[0])  # Calibration.
+        np.testing.assert_array_equal(sent[2], frames[2])  # Ready.
+        np.testing.assert_array_equal(sent[4], frames[1])  # Vanished: background only.
 
     def test_the_monitor_mirrors_the_camera_while_the_call_does_not(self):
         effect = np.full((24, 40, 3), 90, np.uint8)
@@ -265,24 +265,24 @@ class VideoLoopTests(unittest.TestCase):
 
     def test_first_gesture_starts_dissolve_in_the_call(self):
         frames, camera, shown, sent = self.run_mock_video(gesture=("Victory", 0.9))
-        np.testing.assert_array_equal(sent[2][:12], frames[2][:12])  # La dissolvenza parte dal basso.
-        self.assertTrue(np.any(sent[3] != frames[3]))  # Animazione in corso.
-        self.assertTrue(np.any(sent[3] != frames[1]))  # Non ancora sparito.
-        np.testing.assert_array_equal(sent[4], frames[1])  # Animazione completata.
+        np.testing.assert_array_equal(sent[2][:12], frames[2][:12])  # The dissolve starts from the bottom.
+        self.assertTrue(np.any(sent[3] != frames[3]))  # Animation in progress.
+        self.assertTrue(np.any(sent[3] != frames[1]))  # Not vanished yet.
+        np.testing.assert_array_equal(sent[4], frames[1])  # Animation complete.
 
     def test_particles_use_same_v_gesture_and_virtual_output(self):
         frames, camera, shown, sent = self.run_mock_video(
             gesture=("Victory", 0.9), mode="particles",
         )
-        self.assertTrue(np.any(sent[2] != frames[2]))  # Parte subito.
-        self.assertTrue(np.any(sent[3] != frames[3]))  # Corpo si dissolve.
+        self.assertTrue(np.any(sent[2] != frames[2]))  # Starts at once.
+        self.assertTrue(np.any(sent[3] != frames[3]))  # The body dissolves.
         np.testing.assert_array_equal(sent[4], frames[1])
 
     def test_vanished_room_follows_the_camera_outside_the_person(self):
         half = np.zeros((24, 40), np.float32)
         half[:, :20] = 1.0
         frames, camera, shown, sent = self.run_mock_video(mask=half)
-        # Sparito: the stored room where the person is, the live camera everywhere else.
+        # Vanished: the stored room where the person is, the live camera everywhere else.
         np.testing.assert_array_equal(sent[4][:, :20], frames[1][:, :20])
         np.testing.assert_array_equal(sent[4][:, 20:], frames[4][:, 20:])
 
@@ -343,7 +343,7 @@ class VideoLoopTests(unittest.TestCase):
             with ExitStack() as resources:
                 self.assertEqual(app.run_camera(arguments(mode="goku"), resources, "goku"), 0)
 
-        self.assertGreaterEqual(masks.call_count, 2)  # La sagoma è seguita anche da invisibile.
+        self.assertGreaterEqual(masks.call_count, 2)  # The silhouette is tracked while invisible too.
         sound_factory.assert_called_once_with(app.TELEPORT_SOUND_PATH)
         self.assertEqual(sound.play.call_count, 2)
         countdown = [call.args[0] for call in printed.call_args_list
@@ -355,9 +355,9 @@ class VideoLoopTests(unittest.TestCase):
             "[Goku] Reappearing!",
         ])
         sent = [call.args[0] for call in camera.send.call_args_list]
-        gone = np.where(mask[..., None] > 0, frames[1], frames[16])  # Stanza viva, persona tolta.
+        gone = np.where(mask[..., None] > 0, frames[1], frames[16])  # Live room, person removed.
         for monitor, raw in zip(displayed, frames):
-            np.testing.assert_array_equal(monitor, raw)  # La finestra resta una semplice telecamera.
+            np.testing.assert_array_equal(monitor, raw)  # The window stays a plain camera.
         np.testing.assert_array_equal(sent[2], frames[2])
         np.testing.assert_array_equal(sent[14], frames[1])
         np.testing.assert_array_equal(sent[16], gone)
